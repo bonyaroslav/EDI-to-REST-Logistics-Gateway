@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Text;
 using Logistics.EDI.Domain.Abstractions;
 using Logistics.EDI.Domain.Exceptions;
@@ -13,6 +12,42 @@ namespace Logistics.EDI.API.IntegrationTests;
 
 public sealed class Translate204EndpointTests
 {
+    [Fact]
+    public async Task PostTextPlain_WithRealParser_ReturnsTranslatedResponse()
+    {
+        await using WebApplicationFactory<Program> factory = new();
+        using HttpClient client = factory.CreateClient();
+
+        using StringContent content = new(SamplePayloads.Valid204, Encoding.UTF8, "text/plain");
+
+        using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
+        string body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("\"transactionId\":\"0001\"", body);
+        Assert.Contains("\"loadNumber\":\"9999999\"", body);
+        Assert.Contains("\"setPurpose\":\"Original\"", body);
+        Assert.Contains("\"shipperName\":\"DIGIS LOGISTICS\"", body);
+        Assert.Contains("\"type\":\"Pickup\"", body);
+        Assert.Contains("\"type\":\"Delivery\"", body);
+    }
+
+    [Fact]
+    public async Task PostMalformedPayload_WithRealParser_ReturnsStructuredBadRequest()
+    {
+        await using WebApplicationFactory<Program> factory = new();
+        using HttpClient client = factory.CreateClient();
+
+        using StringContent content = new("NOT-EDI", Encoding.UTF8, "text/plain");
+
+        using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
+        string body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("\"error\":\"EdiValidationException\"", body);
+        Assert.Contains("\"message\":\"EDI payload is malformed or not a supported X12 document.\"", body);
+    }
+
     [Fact]
     public async Task PostTextPlain_ReturnsTranslatedResponse()
     {
@@ -131,5 +166,24 @@ public sealed class Translate204EndpointTests
         {
             throw _exception;
         }
+    }
+
+    private static class SamplePayloads
+    {
+        public const string Valid204 =
+            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~" +
+            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~" +
+            "ST*204*0001~" +
+            "B2**XXXX*9999999**PO~" +
+            "B2A*00~" +
+            "G62*37*20250116~" +
+            "N1*SH*DIGIS LOGISTICS~" +
+            "S5*1*CL~" +
+            "N1*SF*DIGIS LOGISTICS~" +
+            "S5*2*CU~" +
+            "N1*ST*DESTINATION DC~" +
+            "SE*10*0001~" +
+            "GE*1*1~" +
+            "IEA*1*000000001~";
     }
 }

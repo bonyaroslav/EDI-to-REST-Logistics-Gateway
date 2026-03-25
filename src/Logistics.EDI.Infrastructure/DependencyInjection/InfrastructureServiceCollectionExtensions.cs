@@ -8,7 +8,7 @@ public static class InfrastructureServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructureServices(this IServiceCollection services)
     {
-        services.AddScoped<ILoadTender204Parser, NotImplementedLoadTender204Parser>();
+        services.AddScoped<ILoadTender204Parser, LoadTender204Parser>();
 
         return services;
     }
