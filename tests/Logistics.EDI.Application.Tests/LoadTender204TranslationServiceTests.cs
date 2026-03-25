@@ -8,6 +8,16 @@ namespace Logistics.EDI.Application.Tests;
 public sealed class LoadTender204TranslationServiceTests
 {
     [Fact]
+    public void Translate_BlankPayload_ThrowsRequiredPayloadValidationException()
+    {
+        LoadTender204TranslationService service = new(new StubLoadTender204Parser(CreateValidDocument()));
+
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => service.Translate(" "));
+
+        Assert.Equal("EDI payload is required.", exception.Message);
+    }
+
+    [Fact]
     public void Translate_MapsParsedDocumentIntoLockedResponseContract()
     {
         ParsedLoadTenderDocument document = new(
@@ -95,6 +105,24 @@ public sealed class LoadTender204TranslationServiceTests
         EdiValidationException exception = Assert.Throws<EdiValidationException>(() => service.Translate("ISA*...~"));
 
         Assert.Equal("B2A set purpose code '99' is not supported for v1.", exception.Message);
+    }
+
+    [Theory]
+    [InlineData("00", "Original")]
+    [InlineData("01", "Cancellation")]
+    [InlineData("04", "Change")]
+    public void Translate_MapsSupportedSetPurposeCodes(string setPurposeCode, string expectedSetPurpose)
+    {
+        ParsedLoadTenderDocument document = CreateValidDocument() with
+        {
+            SetPurposeCode = setPurposeCode
+        };
+
+        LoadTender204TranslationService service = new(new StubLoadTender204Parser(document));
+
+        var response = service.Translate("ISA*...~");
+
+        Assert.Equal(expectedSetPurpose, response.SetPurpose);
     }
 
     [Theory]
@@ -214,6 +242,103 @@ public sealed class LoadTender204TranslationServiceTests
         var response = service.Translate("ISA*...~");
 
         Assert.Equal("2025-01-16T00:00:00.0000000Z", response.EstimatedDeliveryDate);
+    }
+
+    [Theory]
+    [InlineData("CL", "Pickup")]
+    [InlineData("CU", "Delivery")]
+    [InlineData("Pickup", "Pickup")]
+    [InlineData("Delivery", "Delivery")]
+    public void Translate_MapsSupportedStopTypeCodes(string stopTypeCode, string expectedStopType)
+    {
+        ParsedLoadTenderDocument document = CreateValidDocument() with
+        {
+            Stops =
+            [
+                new ParsedStop(1, stopTypeCode, "STOP 1", null),
+                new ParsedStop(2, stopTypeCode == "CL" || stopTypeCode == "Pickup" ? "CU" : "CL", "STOP 2", null)
+            ]
+        };
+
+        LoadTender204TranslationService service = new(new StubLoadTender204Parser(document));
+
+        var response = service.Translate("ISA*...~");
+
+        Assert.Equal(expectedStopType, response.Stops[0].Type);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void Translate_RejectsMissingStopType(string? stopTypeCode)
+    {
+        ParsedLoadTenderDocument document = CreateValidDocument() with
+        {
+            Stops =
+            [
+                new ParsedStop(1, stopTypeCode, "DIGIS LOGISTICS", null),
+                new ParsedStop(2, "CU", "DESTINATION DC", null)
+            ]
+        };
+
+        LoadTender204TranslationService service = new(new StubLoadTender204Parser(document));
+
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => service.Translate("ISA*...~"));
+
+        Assert.Equal("Stop type is missing or malformed.", exception.Message);
+    }
+
+    [Fact]
+    public void Translate_RejectsUnsupportedStopTypeCode()
+    {
+        ParsedLoadTenderDocument document = CreateValidDocument() with
+        {
+            Stops =
+            [
+                new ParsedStop(1, "ZZ", "DIGIS LOGISTICS", null),
+                new ParsedStop(2, "CU", "DESTINATION DC", null)
+            ]
+        };
+
+        LoadTender204TranslationService service = new(new StubLoadTender204Parser(document));
+
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => service.Translate("ISA*...~"));
+
+        Assert.Equal("Stop type code 'ZZ' is not supported for v1.", exception.Message);
+    }
+
+    [Fact]
+    public void Translate_RejectsPayloadWithoutAnyStops()
+    {
+        ParsedLoadTenderDocument document = CreateValidDocument() with
+        {
+            Stops = Array.Empty<ParsedStop>()
+        };
+
+        LoadTender204TranslationService service = new(new StubLoadTender204Parser(document));
+
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => service.Translate("ISA*...~"));
+
+        Assert.Equal("At least one pickup stop and one delivery stop are required.", exception.Message);
+    }
+
+    [Fact]
+    public void Translate_RejectsPayloadWithoutPickupStop()
+    {
+        ParsedLoadTenderDocument document = CreateValidDocument() with
+        {
+            Stops =
+            [
+                new ParsedStop(1, "CU", "DESTINATION DC", null)
+            ]
+        };
+
+        LoadTender204TranslationService service = new(new StubLoadTender204Parser(document));
+
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => service.Translate("ISA*...~"));
+
+        Assert.Equal("At least one pickup stop and one delivery stop are required.", exception.Message);
     }
 
     private static ParsedLoadTenderDocument CreateValidDocument()
