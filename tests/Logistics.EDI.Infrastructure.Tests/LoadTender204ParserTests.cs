@@ -72,7 +72,7 @@ public sealed class LoadTender204ParserTests
     [Fact]
     public void Parse_MalformedPayload_ThrowsPredictableValidationException()
     {
-        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => _parser.Parse("NOT-EDI"));
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => _parser.Parse(SamplePayloads.MalformedPayload));
 
         Assert.Equal("EDI payload is malformed or not a supported X12 document.", exception.Message);
     }
@@ -87,65 +87,60 @@ public sealed class LoadTender204ParserTests
 
     private static class SamplePayloads
     {
-        public const string Valid204 =
-            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~" +
-            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~" +
-            "ST*204*0001~" +
-            "B2**XXXX*9999999**PO~" +
-            "B2A*00~" +
-            "G62*37*20250116~" +
-            "N1*SH*DIGIS LOGISTICS~" +
-            "S5*1*CL~" +
-            "N1*SF*DIGIS LOGISTICS~" +
-            "S5*2*CU~" +
-            "N1*ST*DESTINATION DC~" +
-            "SE*10*0001~" +
-            "GE*1*1~" +
-            "IEA*1*000000001~";
+        public static string Valid204 => SampleFile.Read("valid-original-tender.edi");
+        public static string MissingGs => SampleFile.Read("missing-gs.edi");
+        public static string MissingSt => string.Concat(
+            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~",
+            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~",
+            "B2**XXXX*9999999**PO~",
+            "B2A*00~",
+            "SE*4*0001~",
+            "GE*1*1~",
+            "IEA*1*000000001~");
+        public static string MissingB2 => string.Concat(
+            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~",
+            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~",
+            "ST*204*0001~",
+            "B2A*00~",
+            "SE*4*0001~",
+            "GE*1*1~",
+            "IEA*1*000000001~");
+        public static string MissingB2A => string.Concat(
+            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~",
+            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~",
+            "ST*204*0001~",
+            "B2**XXXX*9999999**PO~",
+            "SE*4*0001~",
+            "GE*1*1~",
+            "IEA*1*000000001~");
+        public static string Non204 => SampleFile.Read("unsupported-transaction-990.edi");
+        public static string MalformedPayload => SampleFile.Read("malformed-payload.edi");
+    }
 
-        public const string MissingGs =
-            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~" +
-            "ST*204*0001~" +
-            "B2**XXXX*9999999**PO~" +
-            "B2A*00~" +
-            "SE*4*0001~" +
-            "IEA*1*000000001~";
+    private static class SampleFile
+    {
+        public static string Read(string fileName)
+        {
+            string repositoryRoot = FindRepositoryRoot();
+            string path = Path.Combine(repositoryRoot, "samples", "204", fileName);
+            return File.ReadAllText(path).ReplaceLineEndings(string.Empty);
+        }
 
-        public const string MissingSt =
-            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~" +
-            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~" +
-            "B2**XXXX*9999999**PO~" +
-            "B2A*00~" +
-            "SE*4*0001~" +
-            "GE*1*1~" +
-            "IEA*1*000000001~";
+        private static string FindRepositoryRoot()
+        {
+            DirectoryInfo? current = new(AppContext.BaseDirectory);
 
-        public const string MissingB2 =
-            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~" +
-            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~" +
-            "ST*204*0001~" +
-            "B2A*00~" +
-            "SE*4*0001~" +
-            "GE*1*1~" +
-            "IEA*1*000000001~";
+            while (current is not null)
+            {
+                if (File.Exists(Path.Combine(current.FullName, "Logistics.EDI.Gateway.sln")))
+                {
+                    return current.FullName;
+                }
 
-        public const string MissingB2A =
-            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~" +
-            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~" +
-            "ST*204*0001~" +
-            "B2**XXXX*9999999**PO~" +
-            "SE*4*0001~" +
-            "GE*1*1~" +
-            "IEA*1*000000001~";
+                current = current.Parent;
+            }
 
-        public const string Non204 =
-            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~" +
-            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~" +
-            "ST*990*0001~" +
-            "B2**XXXX*9999999**PO~" +
-            "B2A*00~" +
-            "SE*5*0001~" +
-            "GE*1*1~" +
-            "IEA*1*000000001~";
+            throw new DirectoryNotFoundException("Could not locate the repository root.");
+        }
     }
 }

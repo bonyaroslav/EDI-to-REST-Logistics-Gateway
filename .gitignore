@@ -4,3 +4,4 @@ obj/
 .vscode/
 .idea/
 .dotnet_home/
+build-*.log

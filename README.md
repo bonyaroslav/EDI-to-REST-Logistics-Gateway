@@ -2,7 +2,7 @@
 
 <h1>EDI 204 Load Tender Integration Engine</h1>
 
-<p><strong>A focused .NET 8 showcase for translating ASC X12 204 load tenders into clean JSON with explicit mapping and pragmatic Clean Architecture.</strong></p>
+<p><strong>A focused .NET 8 portfolio demo that translates ASC X12 204 load tenders into a stable JSON contract through one clean synchronous API flow.</strong></p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/.NET%208.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 8.0" />
@@ -15,36 +15,51 @@
 
 ## Executive Summary
 
-This project is a portfolio-grade demo of a problem many logistics platforms still face every day: converting legacy EDI into a contract modern systems can actually consume.
+This repository demonstrates a narrow but realistic logistics integration problem: taking a raw `text/plain` ASC X12 `204` load tender and returning a clean JSON payload that a modern downstream REST consumer can use.
 
-The scope is intentionally narrow. It demonstrates one strong synchronous flow for **ASC X12 204 (Motor Carrier Load Tender)** translation, with explicit mapping, predictable validation, and a repo structure that shows architectural discipline without burying the demo under unnecessary infrastructure.
+The project is intentionally bounded. It is designed to be easy to review in a technical interview or portfolio walkthrough, not to simulate a production integration platform. The value is in the single vertical slice: parser isolation, explicit validation, and manual mapping that is easy to read and explain.
+
+## Current Status
+
+The demo is complete for its intended v1 scope.
+
+- One supported transaction set: `ASC X12 204`
+- One supported endpoint: `POST /api/v1/edi/translate-204`
+- One public success contract: `LoadTenderResponse`
+- One public error contract: `error`, `message`, `status`
+- One synchronous request/response flow
 
 ## What This Demo Covers
 
-- Raw `text/plain` X12 204 ingestion
-- Translation into a clean JSON contract
-- Required segment validation for a believable demo path
-- Basic business context such as set purpose and pickup/delivery stops
-- Manual mapping that is easy to debug and explain
-- Parser isolation inside the Infrastructure layer
+- Raw `text/plain` X12 `204` ingestion
+- Parsing isolated inside Infrastructure with `Indice.Edi`
+- Application-owned validation for predictable `400` responses
+- Explicit manual mapping into a stable JSON contract
+- Basic logistics context:
+  - transaction id
+  - load number
+  - carrier alpha code
+  - set purpose
+  - estimated delivery date
+  - shipper name
+  - pickup and delivery stops
 
 ## What It Intentionally Does Not Cover
 
-- Full 204 implementation-guide coverage
+- Full `204` implementation-guide coverage
 - Trading-partner-specific customizations
-- EDI 990 / 214 follow-up transactions
-- Queues, brokers, worker services, or async ingestion pipelines
-- Production-hardening concerns such as HA, observability, and throughput tuning
+- `990` tender response processing
+- `214` shipment-status processing
+- Queues, brokers, worker services, or async ingestion
+- Production hardening such as HA, auth, observability, or throughput tuning
 
 ## Quickstart
 
 ```bash
-git clone https://github.com/YourUsername/EDI-to-REST-Logistics-Gateway.git
-cd EDI-to-REST-Logistics-Gateway
 dotnet run --project src/Logistics.EDI.API
 ```
 
-The API will listen locally on the configured ASP.NET Core URL.
+The API listens on the configured ASP.NET Core URL. In development, Swagger UI is available at `/swagger` and the generated OpenAPI document is available at `/swagger/v1/swagger.json`.
 
 ## Repository Structure
 
@@ -56,35 +71,35 @@ src/
   Logistics.EDI.API/
 tests/
   Logistics.EDI.Application.Tests/
+  Logistics.EDI.Infrastructure.Tests/
   Logistics.EDI.API.IntegrationTests/
+samples/
+  204/
 ```
 
-## Interactive Demo Scenarios
+## Sample Payloads
 
-### Scenario 1: Valid Load Tender
+Shared demo payloads live under [`samples/204`](samples/204):
 
-Post a valid X12 204 payload as raw text. Infrastructure parses the EDI document, Application applies explicit mapping and validation, and the API returns a readable JSON contract.
+- `valid-original-tender.edi`
+- `malformed-payload.edi`
+- `missing-gs.edi`
+- `unsupported-transaction-990.edi`
+- `missing-delivery-stop.edi`
+
+These files are documentation assets first. Tests reuse them so the README examples and automated coverage stay aligned.
+
+## Demo Scenarios
+
+### Valid 204 Translation
 
 ```bash
 curl -X POST http://localhost:5000/api/v1/edi/translate-204 \
--H "Content-Type: text/plain" \
--d "ISA*00* *00* *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~
-GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~
-ST*204*0001~
-B2**XXXX*9999999**PO~
-B2A*00~
-G62*37*20250116~
-N1*SH*DIGIS LOGISTICS~
-S5*1*CL~
-N1*SF*DIGIS LOGISTICS~
-S5*2*CU~
-N1*ST*DESTINATION DC~
-SE*10*0001~
-GE*1*1~
-IEA*1*000000001~"
+  -H "Content-Type: text/plain" \
+  --data-binary @samples/204/valid-original-tender.edi
 ```
 
-Expected result:
+Expected response:
 
 ```json
 {
@@ -92,39 +107,35 @@ Expected result:
   "loadNumber": "9999999",
   "carrierAlphaCode": "XXXX",
   "setPurpose": "Original",
-  "estimatedDeliveryDate": "2025-01-16T00:00:00Z",
+  "estimatedDeliveryDate": "2025-01-16T00:00:00.0000000Z",
   "shipperName": "DIGIS LOGISTICS",
   "stops": [
     {
       "sequence": 1,
       "type": "Pickup",
-      "name": "DIGIS LOGISTICS"
+      "name": "DIGIS LOGISTICS",
+      "scheduledDateTime": null
     },
     {
       "sequence": 2,
       "type": "Delivery",
-      "name": "DESTINATION DC"
+      "name": "DESTINATION DC",
+      "scheduledDateTime": null
     }
   ],
   "status": "Success"
 }
 ```
 
-### Scenario 2: Malformed Or Incomplete Input
-
-Trading partners send incomplete payloads. For v1, the API returns a predictable `400 Bad Request` response for malformed or incomplete 204 input instead of leaking parser internals or failing with a generic `500`.
+### Predictable Validation Failure
 
 ```bash
 curl -X POST http://localhost:5000/api/v1/edi/translate-204 \
--H "Content-Type: text/plain" \
--d "ISA*00* *00* *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~
-ST*204*0001~
-B2**XXXX*9999999**PO~
-SE*4*0001~
-IEA*1*000000001~"
+  -H "Content-Type: text/plain" \
+  --data-binary @samples/204/missing-gs.edi
 ```
 
-Expected result:
+Expected response:
 
 ```json
 {
@@ -134,37 +145,77 @@ Expected result:
 }
 ```
 
-## Core Engineering Decisions
+## API Contract
 
-1. **Manual mapping over AutoMapper:** the transformation logic is part of the demo. It should be readable, testable, and debuggable without indirection.
-2. **Pragmatic Clean Architecture:** Domain, Application, Infrastructure, and API remain distinct, but the implementation stays focused on one end-to-end slice.
-3. **Parser isolation:** `Indice.Edi` lives only in Infrastructure. The rest of the solution should not depend on parser-specific POCOs.
-4. **Synchronous by design:** the goal is to demonstrate parsing, validation, and transformation clearly, not to showcase distributed ingestion patterns.
-5. **Realistic but bounded validation:** v1 checks both structural integrity and a small set of business-significant rules, including set purpose and pickup/delivery stop presence.
+### Success Response
+
+The public success contract is intentionally small and stable:
+
+- `transactionId`
+- `loadNumber`
+- `carrierAlphaCode`
+- `setPurpose`
+- `estimatedDeliveryDate`
+- `shipperName`
+- `stops`
+- `status`
+
+### Error Response
+
+All handled API failures use the same shape:
+
+```json
+{
+  "error": "EdiValidationException",
+  "message": "Mandatory segment 'GS' is missing or malformed.",
+  "status": 400
+}
+```
+
+### API Defaults
+
+- Blank or whitespace request bodies return `400`
+- Non-`text/plain` content returns `415`
+- Unsupported transaction sets such as `990` return `400`
+- Known validation failures never leak parser internals
+- Unexpected faults return `500` with the same error shape and a generic message
+- Business dates are serialized as UTC-midnight ISO-8601 strings
+- Blank optional text values normalize to `null`
+
+## Demo Talking Points
+
+- Parser isolation: `Indice.Edi` is used only in Infrastructure, not in Application or API contracts.
+- Manual mapping: transformation logic is explicit and reviewable, with no mapping framework hiding business rules.
+- Predictable validation: Application and Infrastructure convert malformed or incomplete input into stable client-facing `400` responses.
+- Synchronous by design: the project demonstrates the core `204 -> JSON` boundary clearly, without queueing or distributed ingestion noise.
 
 ## Architecture Flow
 
 ```mermaid
 graph TD
-    A["Raw X12 204 payload"] --> B["API endpoint"]
+    A["Raw X12 204 payload"] --> B["Minimal API endpoint"]
     B --> C["Application translation service"]
     C --> D["Parser abstraction"]
 
     subgraph Infrastructure
     D --> E["Indice.Edi parser"]
-    E --> F["Parser-specific models"]
-    F --> G["Application-safe parsed model"]
+    E --> F["Canonical parsed model"]
     end
 
     subgraph Application
-    G --> H["Explicit validation and manual mapping"]
-    H --> I["LoadTender response DTO"]
+    F --> G["Explicit validation and mapping"]
+    G --> H["LoadTenderResponse"]
     end
 
-    I --> J["200 OK or 400 Bad Request"]
+    H --> I["200 / 400 / 415 / 500"]
+```
+
+## Verification
+
+```bash
+dotnet test Logistics.EDI.Gateway.sln
 ```
 
 ## Real-World Context
 
-In a production logistics stack, a successful 204 translation often leads to later processes such as `990` tender response handling and `214` shipment-status updates. This demo stops at the 204-to-JSON boundary on purpose so the codebase stays reviewable, runnable, and easy to discuss in a short technical screening.
-
+In a production logistics platform, a translated `204` often leads into later workflows such as `990` tender responses and `214` shipment-status events. This repository stops deliberately at the `204 -> JSON` boundary so the demo stays compact, understandable, and interview-friendly.

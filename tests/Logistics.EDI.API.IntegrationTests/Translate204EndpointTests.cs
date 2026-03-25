@@ -1,5 +1,7 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using Logistics.EDI.Domain.Abstractions;
 using Logistics.EDI.Domain.Exceptions;
 using Logistics.EDI.Domain.Models;
@@ -18,7 +20,7 @@ public sealed class Translate204EndpointTests
         await using WebApplicationFactory<Program> factory = new();
         using HttpClient client = factory.CreateClient();
 
-        using StringContent content = new(SamplePayloads.Valid204, Encoding.UTF8, "text/plain");
+        using StringContent content = new(SamplePayloads.ValidOriginalTender, Encoding.UTF8, "text/plain");
 
         using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
         string body = await response.Content.ReadAsStringAsync();
@@ -38,7 +40,7 @@ public sealed class Translate204EndpointTests
         await using WebApplicationFactory<Program> factory = new();
         using HttpClient client = factory.CreateClient();
 
-        using StringContent content = new("NOT-EDI", Encoding.UTF8, "text/plain");
+        using StringContent content = new(SamplePayloads.MalformedPayload, Encoding.UTF8, "text/plain");
 
         using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
         string body = await response.Content.ReadAsStringAsync();
@@ -88,10 +90,32 @@ public sealed class Translate204EndpointTests
         using StringContent content = new("{\"edi\":\"ISA*00*...~\"}", Encoding.UTF8, "application/json");
 
         using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
-        string body = await response.Content.ReadAsStringAsync();
+        ValidationErrorResponse? body = await response.Content.ReadFromJsonAsync<ValidationErrorResponse>();
 
         Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
-        Assert.True(string.IsNullOrEmpty(body) || body.Contains("\"error\":\"UnsupportedMediaType\"", StringComparison.Ordinal));
+        Assert.NotNull(body);
+        Assert.Equal("UnsupportedMediaType", body.Error);
+        Assert.Equal("Content-Type must be text/plain.", body.Message);
+        Assert.Equal((int)HttpStatusCode.UnsupportedMediaType, body.Status);
+    }
+
+    [Fact]
+    public async Task PostInvalidNearMatchTextPlainContentType_ReturnsUnsupportedMediaType()
+    {
+        await using WebApplicationFactory<Program> factory = new();
+        using HttpClient client = factory.CreateClient();
+
+        using ByteArrayContent content = new(Encoding.UTF8.GetBytes(SamplePayloads.ValidOriginalTender));
+        content.Headers.TryAddWithoutValidation("Content-Type", "text/plain-invalid");
+
+        using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
+        ValidationErrorResponse? body = await response.Content.ReadFromJsonAsync<ValidationErrorResponse>();
+
+        Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal("UnsupportedMediaType", body.Error);
+        Assert.Equal("Content-Type must be text/plain.", body.Message);
+        Assert.Equal((int)HttpStatusCode.UnsupportedMediaType, body.Status);
     }
 
     [Fact]
@@ -109,6 +133,106 @@ public sealed class Translate204EndpointTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("\"error\":\"EdiValidationException\"", body);
         Assert.Contains("\"message\":\"Mandatory segment 'GS' is missing or malformed.\"", body);
+    }
+
+    [Fact]
+    public async Task PostBlankPayload_ReturnsStructuredBadRequest()
+    {
+        await using WebApplicationFactory<Program> factory = new();
+        using HttpClient client = factory.CreateClient();
+
+        using StringContent content = new(" ", Encoding.UTF8, "text/plain");
+
+        using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
+        ValidationErrorResponse? body = await response.Content.ReadFromJsonAsync<ValidationErrorResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal("EdiValidationException", body.Error);
+        Assert.Equal("EDI payload is required.", body.Message);
+        Assert.Equal((int)HttpStatusCode.BadRequest, body.Status);
+    }
+
+    [Fact]
+    public async Task PostUnsupportedTransactionSet_WithRealParser_ReturnsStructuredBadRequest()
+    {
+        await using WebApplicationFactory<Program> factory = new();
+        using HttpClient client = factory.CreateClient();
+
+        using StringContent content = new(SamplePayloads.UnsupportedTransaction990, Encoding.UTF8, "text/plain");
+
+        using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
+        ValidationErrorResponse? body = await response.Content.ReadFromJsonAsync<ValidationErrorResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal("EdiValidationException", body.Error);
+        Assert.Equal("Only ASC X12 204 transactions are supported.", body.Message);
+        Assert.Equal((int)HttpStatusCode.BadRequest, body.Status);
+    }
+
+    [Fact]
+    public async Task PostPayloadWithoutDeliveryStop_WithRealParser_ReturnsStructuredBadRequest()
+    {
+        await using WebApplicationFactory<Program> factory = new();
+        using HttpClient client = factory.CreateClient();
+
+        using StringContent content = new(SamplePayloads.MissingDeliveryStop, Encoding.UTF8, "text/plain");
+
+        using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
+        ValidationErrorResponse? body = await response.Content.ReadFromJsonAsync<ValidationErrorResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal("EdiValidationException", body.Error);
+        Assert.Equal("At least one pickup stop and one delivery stop are required.", body.Message);
+        Assert.Equal((int)HttpStatusCode.BadRequest, body.Status);
+    }
+
+    [Fact]
+    public async Task PostUnexpectedFailure_ReturnsStructuredInternalServerError()
+    {
+        await using TestWebApplicationFactory factory = new(new ThrowingLoadTender204Parser(new InvalidOperationException("boom")));
+        using HttpClient client = factory.CreateClient();
+
+        using StringContent content = new(SamplePayloads.ValidOriginalTender, Encoding.UTF8, "text/plain");
+
+        using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
+        ValidationErrorResponse? body = await response.Content.ReadFromJsonAsync<ValidationErrorResponse>();
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.NotNull(body);
+        Assert.Equal("InternalServerError", body.Error);
+        Assert.Equal("An unexpected error occurred while processing the EDI payload.", body.Message);
+        Assert.Equal((int)HttpStatusCode.InternalServerError, body.Status);
+    }
+
+    [Fact]
+    public async Task SwaggerDocument_AdvertisesTextPlainRequestBody()
+    {
+        await using WebApplicationFactory<Program> factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
+        using HttpClient client = factory.CreateClient();
+
+        using HttpResponseMessage response = await client.GetAsync("/swagger/v1/swagger.json");
+        string body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using JsonDocument document = JsonDocument.Parse(body);
+        JsonElement requestBody = document.RootElement
+            .GetProperty("paths")
+            .GetProperty("/api/v1/edi/translate-204")
+            .GetProperty("post")
+            .GetProperty("requestBody");
+
+        Assert.True(requestBody.GetProperty("required").GetBoolean());
+
+        JsonElement textPlainContent = requestBody
+            .GetProperty("content")
+            .GetProperty("text/plain");
+
+        Assert.Equal("string", textPlainContent.GetProperty("schema").GetProperty("type").GetString());
     }
 
     private sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
@@ -168,22 +292,40 @@ public sealed class Translate204EndpointTests
         }
     }
 
+    private sealed record ValidationErrorResponse(string Error, string Message, int Status);
+
     private static class SamplePayloads
     {
-        public const string Valid204 =
-            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~" +
-            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~" +
-            "ST*204*0001~" +
-            "B2**XXXX*9999999**PO~" +
-            "B2A*00~" +
-            "G62*37*20250116~" +
-            "N1*SH*DIGIS LOGISTICS~" +
-            "S5*1*CL~" +
-            "N1*SF*DIGIS LOGISTICS~" +
-            "S5*2*CU~" +
-            "N1*ST*DESTINATION DC~" +
-            "SE*10*0001~" +
-            "GE*1*1~" +
-            "IEA*1*000000001~";
+        public static string ValidOriginalTender => SampleFile.Read("valid-original-tender.edi");
+        public static string MalformedPayload => SampleFile.Read("malformed-payload.edi");
+        public static string UnsupportedTransaction990 => SampleFile.Read("unsupported-transaction-990.edi");
+        public static string MissingDeliveryStop => SampleFile.Read("missing-delivery-stop.edi");
+    }
+
+    private static class SampleFile
+    {
+        public static string Read(string fileName)
+        {
+            string repositoryRoot = FindRepositoryRoot();
+            string path = Path.Combine(repositoryRoot, "samples", "204", fileName);
+            return File.ReadAllText(path).ReplaceLineEndings(string.Empty);
+        }
+
+        private static string FindRepositoryRoot()
+        {
+            DirectoryInfo? current = new(AppContext.BaseDirectory);
+
+            while (current is not null)
+            {
+                if (File.Exists(Path.Combine(current.FullName, "Logistics.EDI.Gateway.sln")))
+                {
+                    return current.FullName;
+                }
+
+                current = current.Parent;
+            }
+
+            throw new DirectoryNotFoundException("Could not locate the repository root.");
+        }
     }
 }
