@@ -1,9 +1,8 @@
-```html
 <div align="center">
 
-# 🚛 EDI 204 Load Tender Integration Engine
+<h1>🚛 EDI 204 Load Tender Integration Engine</h1>
 
-**A high-performance, strictly typed API bridging legacy logistics data with modern REST platforms.**
+<p><strong>A high-performance, strictly typed API bridging legacy logistics data with modern REST platforms.</strong></p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/.NET%208.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 8.0" />
@@ -28,7 +27,7 @@ Instead of hiding behind bloated message brokers or black-box mapping libraries,
 Reviewing code shouldn't require fighting with environments. This API is designed for zero-friction onboarding.
 
 ```bash
-git clone [https://github.com/YourUsername/Logistics.EDI.Api.git](https://github.com/YourUsername/Logistics.EDI.Api.git)
+git clone https://github.com/YourUsername/Logistics.EDI.Api.git
 cd Logistics.EDI.Api/src/Logistics.EDI.Api
 dotnet run
 ```
@@ -124,5 +123,4 @@ graph TD
     
     E --> F[Clean JSON LoadTenderDto]
     F -->|200 OK| G[Downstream Consumers]
-```
 ```
