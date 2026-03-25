@@ -1,10 +1,10 @@
-namespace Logistics.EDI.Application.Models;
+namespace Logistics.EDI.Domain.Models;
 
 public sealed record ParsedLoadTenderDocument(
     string? TransactionId,
     string? LoadNumber,
     string? CarrierAlphaCode,
     string? SetPurposeCode,
-    string? EstimatedDeliveryDate,
+    DateOnly? EstimatedDeliveryDate,
     string? ShipperName,
     IReadOnlyList<ParsedStop> Stops);

@@ -1,0 +1,114 @@
+using Logistics.EDI.Application.Services;
+using Logistics.EDI.Domain.Abstractions;
+using Logistics.EDI.Domain.Exceptions;
+using Logistics.EDI.Domain.Models;
+
+namespace Logistics.EDI.Application.Tests;
+
+public sealed class LoadTender204TranslationServiceTests
+{
+    [Fact]
+    public void Translate_MapsParsedDocumentIntoLockedResponseContract()
+    {
+        ParsedLoadTenderDocument document = new(
+            TransactionId: "0001",
+            LoadNumber: "9999999",
+            CarrierAlphaCode: "XXXX",
+            SetPurposeCode: "00",
+            EstimatedDeliveryDate: new DateOnly(2025, 1, 16),
+            ShipperName: "DIGIS LOGISTICS",
+            Stops:
+            [
+                new ParsedStop(1, "CL", "DIGIS LOGISTICS", new DateTimeOffset(2025, 1, 15, 8, 30, 0, TimeSpan.Zero)),
+                new ParsedStop(2, "CU", "DESTINATION DC", null)
+            ]);
+
+        LoadTender204TranslationService service = new(new StubLoadTender204Parser(document));
+
+        var response = service.Translate("ISA*...~");
+
+        Assert.Equal("0001", response.TransactionId);
+        Assert.Equal("9999999", response.LoadNumber);
+        Assert.Equal("XXXX", response.CarrierAlphaCode);
+        Assert.Equal("Original", response.SetPurpose);
+        Assert.Equal("2025-01-16T00:00:00.0000000Z", response.EstimatedDeliveryDate);
+        Assert.Equal("DIGIS LOGISTICS", response.ShipperName);
+        Assert.Collection(
+            response.Stops,
+            stop =>
+            {
+                Assert.Equal(1, stop.Sequence);
+                Assert.Equal("Pickup", stop.Type);
+                Assert.Equal("DIGIS LOGISTICS", stop.Name);
+                Assert.Equal("2025-01-15T08:30:00.0000000+00:00", stop.ScheduledDateTime);
+            },
+            stop =>
+            {
+                Assert.Equal(2, stop.Sequence);
+                Assert.Equal("Delivery", stop.Type);
+                Assert.Equal("DESTINATION DC", stop.Name);
+                Assert.Null(stop.ScheduledDateTime);
+            });
+        Assert.Equal("Success", response.Status);
+    }
+
+    [Fact]
+    public void Translate_RejectsPayloadWithoutBothPickupAndDeliveryStops()
+    {
+        ParsedLoadTenderDocument document = new(
+            TransactionId: "0001",
+            LoadNumber: "9999999",
+            CarrierAlphaCode: "XXXX",
+            SetPurposeCode: "00",
+            EstimatedDeliveryDate: new DateOnly(2025, 1, 16),
+            ShipperName: "DIGIS LOGISTICS",
+            Stops:
+            [
+                new ParsedStop(1, "CL", "DIGIS LOGISTICS", null)
+            ]);
+
+        LoadTender204TranslationService service = new(new StubLoadTender204Parser(document));
+
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => service.Translate("ISA*...~"));
+
+        Assert.Equal("At least one pickup stop and one delivery stop are required.", exception.Message);
+    }
+
+    [Fact]
+    public void Translate_RejectsUnsupportedSetPurposeCodes()
+    {
+        ParsedLoadTenderDocument document = new(
+            TransactionId: "0001",
+            LoadNumber: "9999999",
+            CarrierAlphaCode: "XXXX",
+            SetPurposeCode: "99",
+            EstimatedDeliveryDate: null,
+            ShipperName: "DIGIS LOGISTICS",
+            Stops:
+            [
+                new ParsedStop(1, "Pickup", "DIGIS LOGISTICS", null),
+                new ParsedStop(2, "Delivery", "DESTINATION DC", null)
+            ]);
+
+        LoadTender204TranslationService service = new(new StubLoadTender204Parser(document));
+
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => service.Translate("ISA*...~"));
+
+        Assert.Equal("B2A set purpose code '99' is not supported for v1.", exception.Message);
+    }
+
+    private sealed class StubLoadTender204Parser : ILoadTender204Parser
+    {
+        private readonly ParsedLoadTenderDocument _document;
+
+        public StubLoadTender204Parser(ParsedLoadTenderDocument document)
+        {
+            _document = document;
+        }
+
+        public ParsedLoadTenderDocument Parse(string rawEdi)
+        {
+            return _document;
+        }
+    }
+}
