@@ -1,48 +1,70 @@
 <div align="center">
 
-<h1>🚛 EDI 204 Load Tender Integration Engine</h1>
+<h1>EDI 204 Load Tender Integration Engine</h1>
 
-<p><strong>A high-performance, strictly typed API bridging legacy logistics data with modern REST platforms.</strong></p>
+<p><strong>A focused .NET 8 showcase for translating ASC X12 204 load tenders into clean JSON with explicit mapping and pragmatic Clean Architecture.</strong></p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/.NET%208.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 8.0" />
-  <img src="https://img.shields.io/badge/Architecture-Clean%20%2F%20DDD-007ACC?style=for-the-badge&logo=codeigniter&logoColor=white" alt="Clean Architecture" />
+  <img src="https://img.shields.io/badge/Architecture-Pragmatic%20Clean-007ACC?style=for-the-badge&logo=codeigniter&logoColor=white" alt="Pragmatic Clean Architecture" />
   <img src="https://img.shields.io/badge/Format-ASC%20X12%20204-FF6C37?style=for-the-badge&logo=databricks&logoColor=white" alt="ASC X12 204" />
-  <img src="https://img.shields.io/badge/Mapping-Manual%20(No%20AutoMapper)-E34F26?style=for-the-badge&logo=csharp&logoColor=white" alt="Manual Mapping" />
+  <img src="https://img.shields.io/badge/Mapping-Manual-E34F26?style=for-the-badge&logo=csharp&logoColor=white" alt="Manual Mapping" />
 </p>
 
----
 </div>
 
-## 💡 Executive Summary
+## Executive Summary
 
-In high-load logistics environments, the parsing of legacy Electronic Data Interchange (EDI) formats is a major operational bottleneck. This project demonstrates a production-ready approach to processing **ASC X12 204 (Motor Carrier Load Tender)** documents. 
+This project is a portfolio-grade demo of a problem many logistics platforms still face every day: converting legacy EDI into a contract modern systems can actually consume.
 
-Instead of hiding behind bloated message brokers or black-box mapping libraries, this solution highlights **pure domain logic**. It utilizes strict Domain-Driven Design (DDD), synchronous processing, and explicit manual mapping to ensure that when a trading partner sends malformed data, the system is instantly debuggable and fails gracefully.
+The scope is intentionally narrow. It demonstrates one strong synchronous flow for **ASC X12 204 (Motor Carrier Load Tender)** translation, with explicit mapping, predictable validation, and a repo structure that shows architectural discipline without burying the demo under unnecessary infrastructure.
 
----
+## What This Demo Covers
 
-## 🚀 10-Second Quickstart
+- Raw `text/plain` X12 204 ingestion
+- Translation into a clean JSON contract
+- Required segment validation for a believable demo path
+- Basic business context such as set purpose and pickup/delivery stops
+- Manual mapping that is easy to debug and explain
+- Parser isolation inside the Infrastructure layer
 
-Reviewing code shouldn't require fighting with environments. This API is designed for zero-friction onboarding.
+## What It Intentionally Does Not Cover
+
+- Full 204 implementation-guide coverage
+- Trading-partner-specific customizations
+- EDI 990 / 214 follow-up transactions
+- Queues, brokers, worker services, or async ingestion pipelines
+- Production-hardening concerns such as HA, observability, and throughput tuning
+
+## Quickstart
 
 ```bash
-git clone https://github.com/YourUsername/Logistics.EDI.Api.git
-cd Logistics.EDI.Api/src/Logistics.EDI.Api
-dotnet run
+git clone https://github.com/YourUsername/EDI-to-REST-Logistics-Gateway.git
+cd EDI-to-REST-Logistics-Gateway
+dotnet run --project src/Logistics.EDI.API
 ```
-*The API is now listening locally on `http://localhost:5000`.*
 
----
+The API will listen locally on the configured ASP.NET Core URL.
 
-## 🎬 Interactive Demo Scenarios
+## Repository Structure
 
-Logistics data is rarely perfect. To demonstrate the robustness of this architecture, please run the following two scenarios directly from your terminal. 
+```text
+src/
+  Logistics.EDI.Domain/
+  Logistics.EDI.Application/
+  Logistics.EDI.Infrastructure/
+  Logistics.EDI.API/
+tests/
+  Logistics.EDI.Application.Tests/
+  Logistics.EDI.API.IntegrationTests/
+```
 
-### Scenario 1: The "Happy Path" (Valid Load Tender)
-**What is happening:** We are posting a raw, valid X12 204 payload. The `Indice.Edi` infrastructure layer will deserialize the cryptic segments (`ISA`, `GS`, `ST`), pass the POCOs to the Application layer, where **explicit manual mappers** transform the data into a clean JSON contract.
+## Interactive Demo Scenarios
 
-**Run this command:**
+### Scenario 1: Valid Load Tender
+
+Post a valid X12 204 payload as raw text. Infrastructure parses the EDI document, Application applies explicit mapping and validation, and the API returns a readable JSON contract.
+
 ```bash
 curl -X POST http://localhost:5000/api/v1/edi/translate-204 \
 -H "Content-Type: text/plain" \
@@ -50,30 +72,48 @@ curl -X POST http://localhost:5000/api/v1/edi/translate-204 \
 GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~
 ST*204*0001~
 B2**XXXX*9999999**PO~
+B2A*00~
 G62*37*20250116~
 N1*SH*DIGIS LOGISTICS~
-SE*6*0001~
+S5*1*CL~
+N1*SF*DIGIS LOGISTICS~
+S5*2*CU~
+N1*ST*DESTINATION DC~
+SE*10*0001~
 GE*1*1~
 IEA*1*000000001~"
 ```
 
-**Expected Result (200 OK):** You will receive a clean, front-end ready JSON object. Notice how cryptic data like `G62*37` is cleanly mapped to an `EstimatedDeliveryDate`.
+Expected result:
 
 ```json
 {
   "transactionId": "0001",
   "loadNumber": "9999999",
   "carrierAlphaCode": "XXXX",
+  "setPurpose": "Original",
   "estimatedDeliveryDate": "2025-01-16T00:00:00Z",
   "shipperName": "DIGIS LOGISTICS",
+  "stops": [
+    {
+      "sequence": 1,
+      "type": "Pickup",
+      "name": "DIGIS LOGISTICS"
+    },
+    {
+      "sequence": 2,
+      "type": "Delivery",
+      "name": "DESTINATION DC"
+    }
+  ],
   "status": "Success"
 }
 ```
 
-### Scenario 2: The Reality Check (Malformed Data)
-**What is happening:** Trading partners make mistakes. In this payload, we have entirely removed the mandatory `GS` (Functional Group Header) segment. Instead of a catastrophic crash or a vague 500 Internal Server Error, our Global Exception Handling Middleware intercepts the parsing failure.
+### Scenario 2: Malformed Or Incomplete Input
 
-**Run this command (Notice the missing GS line):**
+Trading partners send incomplete payloads. For v1, the API returns a predictable `400 Bad Request` response for malformed or incomplete 204 input instead of leaking parser internals or failing with a generic `500`.
+
 ```bash
 curl -X POST http://localhost:5000/api/v1/edi/translate-204 \
 -H "Content-Type: text/plain" \
@@ -84,43 +124,47 @@ SE*4*0001~
 IEA*1*000000001~"
 ```
 
-**Expected Result (400 Bad Request):** The API instantly pinpoints the failure, providing actionable feedback for the integrations team.
+Expected result:
 
 ```json
 {
   "error": "EdiValidationException",
-  "message": "Failed to parse EDI document. Mandatory segment 'GS' is missing or malformed.",
+  "message": "Mandatory segment 'GS' is missing or malformed.",
   "status": 400
 }
 ```
 
----
+## Core Engineering Decisions
 
-## ⚙️ Core Engineering Decisions
+1. **Manual mapping over AutoMapper:** the transformation logic is part of the demo. It should be readable, testable, and debuggable without indirection.
+2. **Pragmatic Clean Architecture:** Domain, Application, Infrastructure, and API remain distinct, but the implementation stays focused on one end-to-end slice.
+3. **Parser isolation:** `Indice.Edi` lives only in Infrastructure. The rest of the solution should not depend on parser-specific POCOs.
+4. **Synchronous by design:** the goal is to demonstrate parsing, validation, and transformation clearly, not to showcase distributed ingestion patterns.
+5. **Realistic but bounded validation:** v1 checks both structural integrity and a small set of business-significant rules, including set purpose and pickup/delivery stop presence.
 
-Why was this built this way?
-
-1. **Strictly Manual Mapping (No AutoMapper):** In logistics, a missing `L11` reference number can delay a physical truck. By explicitly writing mappers (`var dto = new LoadTenderDto { LoadNumber = edi.B2.ShipmentId }`), developers can place a breakpoint and instantly trace missing data. AutoMapper obscures this process behind reflection and profiles, making production debugging a nightmare.
-2. **Infrastructure Abstraction:** The `Indice.Edi` parser is strictly confined to the `Infrastructure` project. The `Domain` layer only knows about C# interfaces. If the business ever mandates a shift to a commercial EDI parser (like EdiFabric), the API and Business Logic remain 100% untouched.
-3. **Synchronous by Design:** While enterprise systems often rely on Azure Service Bus or RabbitMQ, introducing them here obscures the core challenge: memory-efficient string parsing and domain mapping. This API is purposefully synchronous to isolate and prove competency in raw data transformation.
-
----
-
-## 🏗️ Architecture Flow
+## Architecture Flow
 
 ```mermaid
 graph TD
-    A[Raw X12 204 String] -->|POST Request| B(Web API Controller)
-    B --> C[IEdiParserService]
-    
-    subgraph Infrastructure Layer
-    C -->|Indice.Edi Engine| D[EDI POCOs]
+    A["Raw X12 204 payload"] --> B["API endpoint"]
+    B --> C["Application translation service"]
+    C --> D["Parser abstraction"]
+
+    subgraph Infrastructure
+    D --> E["Indice.Edi parser"]
+    E --> F["Parser-specific models"]
+    F --> G["Application-safe parsed model"]
     end
-    
-    subgraph Application Layer
-    D --> E[Explicit Domain Mappers]
+
+    subgraph Application
+    G --> H["Explicit validation and manual mapping"]
+    H --> I["LoadTender response DTO"]
     end
-    
-    E --> F[Clean JSON LoadTenderDto]
-    F -->|200 OK| G[Downstream Consumers]
+
+    I --> J["200 OK or 400 Bad Request"]
 ```
+
+## Real-World Context
+
+In a production logistics stack, a successful 204 translation often leads to later processes such as `990` tender response handling and `214` shipment-status updates. This demo stops at the 204-to-JSON boundary on purpose so the codebase stays reviewable, runnable, and easy to discuss in a short technical screening.
+
