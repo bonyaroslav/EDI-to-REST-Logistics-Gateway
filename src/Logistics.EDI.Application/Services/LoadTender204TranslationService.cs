@@ -9,6 +9,7 @@ namespace Logistics.EDI.Application.Services;
 public sealed class LoadTender204TranslationService : ILoadTender204TranslationService
 {
     private readonly ILoadTender204Parser _parser;
+    private const string MissingPickupOrDeliveryStopsMessage = "At least one pickup stop and one delivery stop are required.";
 
     public LoadTender204TranslationService(ILoadTender204Parser parser)
     {
@@ -48,7 +49,7 @@ public sealed class LoadTender204TranslationService : ILoadTender204TranslationS
     {
         if (stops.Count == 0)
         {
-            throw new EdiValidationException("At least one pickup stop and one delivery stop are required.");
+            throw new EdiValidationException(MissingPickupOrDeliveryStopsMessage);
         }
 
         return stops
@@ -65,7 +66,7 @@ public sealed class LoadTender204TranslationService : ILoadTender204TranslationS
         "00" => "Original",
         "01" => "Cancellation",
         "04" => "Change",
-        null or "" => throw new EdiValidationException("B2A set purpose is missing or malformed."),
+        _ when string.IsNullOrWhiteSpace(setPurposeCode) => throw new EdiValidationException("B2A set purpose is missing or malformed."),
         _ => throw new EdiValidationException($"B2A set purpose code '{setPurposeCode}' is not supported for v1.")
     };
 
@@ -75,7 +76,7 @@ public sealed class LoadTender204TranslationService : ILoadTender204TranslationS
         "Delivery" => "Delivery",
         "CL" => "Pickup",
         "CU" => "Delivery",
-        null or "" => throw new EdiValidationException("Stop type is missing or malformed."),
+        _ when string.IsNullOrWhiteSpace(typeCode) => throw new EdiValidationException("Stop type is missing or malformed."),
         _ => throw new EdiValidationException($"Stop type code '{typeCode}' is not supported for v1.")
     };
 
@@ -83,12 +84,13 @@ public sealed class LoadTender204TranslationService : ILoadTender204TranslationS
     {
         if (!stops.Any(stop => string.Equals(stop.Type, type, StringComparison.Ordinal)))
         {
-            throw new EdiValidationException("At least one pickup stop and one delivery stop are required.");
+            throw new EdiValidationException(MissingPickupOrDeliveryStopsMessage);
         }
     }
 
     private static string? FormatEstimatedDeliveryDate(DateOnly? estimatedDeliveryDate)
     {
+        // The public contract exposes business dates as UTC midnight ISO-8601 strings.
         return estimatedDeliveryDate?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).ToString("O");
     }
 
