@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Logistics.EDI.Application.Contracts;
 using Logistics.EDI.Domain.Abstractions;
 using Logistics.EDI.Domain.Exceptions;
 using Logistics.EDI.Domain.Models;
@@ -23,15 +24,31 @@ public sealed class Translate204EndpointTests
         using StringContent content = new(SamplePayloads.ValidOriginalTender, Encoding.UTF8, "text/plain");
 
         using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
-        string body = await response.Content.ReadAsStringAsync();
+        LoadTenderResponse? body = await response.Content.ReadFromJsonAsync<LoadTenderResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("\"transactionId\":\"0001\"", body);
-        Assert.Contains("\"loadNumber\":\"9999999\"", body);
-        Assert.Contains("\"setPurpose\":\"Original\"", body);
-        Assert.Contains("\"shipperName\":\"DIGIS LOGISTICS\"", body);
-        Assert.Contains("\"type\":\"Pickup\"", body);
-        Assert.Contains("\"type\":\"Delivery\"", body);
+        Assert.NotNull(body);
+        Assert.Equal("0001", body.TransactionId);
+        Assert.Equal("9999999", body.LoadNumber);
+        Assert.Equal("XXXX", body.CarrierAlphaCode);
+        Assert.Equal("Original", body.SetPurpose);
+        Assert.Equal("2025-01-16T00:00:00.0000000Z", body.EstimatedDeliveryDate);
+        Assert.Equal("DIGIS LOGISTICS", body.ShipperName);
+        Assert.Collection(
+            body.Stops,
+            stop =>
+            {
+                Assert.Equal(1, stop.Sequence);
+                Assert.Equal("Pickup", stop.Type);
+                Assert.Equal("DIGIS LOGISTICS", stop.Name);
+            },
+            stop =>
+            {
+                Assert.Equal(2, stop.Sequence);
+                Assert.Equal("Delivery", stop.Type);
+                Assert.Equal("DESTINATION DC", stop.Name);
+            });
+        Assert.Equal("Success", body.Status);
     }
 
     [Fact]
@@ -43,15 +60,17 @@ public sealed class Translate204EndpointTests
         using StringContent content = new(SamplePayloads.MalformedPayload, Encoding.UTF8, "text/plain");
 
         using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
-        string body = await response.Content.ReadAsStringAsync();
+        ValidationErrorResponse? body = await response.Content.ReadFromJsonAsync<ValidationErrorResponse>();
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("\"error\":\"EdiValidationException\"", body);
-        Assert.Contains("\"message\":\"EDI payload is malformed or not a supported X12 document.\"", body);
+        Assert.NotNull(body);
+        Assert.Equal("EdiValidationException", body.Error);
+        Assert.Equal("EDI payload is malformed or not a supported X12 document.", body.Message);
+        Assert.Equal((int)HttpStatusCode.BadRequest, body.Status);
     }
 
     [Fact]
-    public async Task PostTextPlain_ReturnsTranslatedResponse()
+    public async Task PostTextPlain_WithStubParser_ReturnsTranslatedResponse()
     {
         await using TestWebApplicationFactory factory = new(new StubLoadTender204Parser(
             new ParsedLoadTenderDocument(
@@ -63,21 +82,24 @@ public sealed class Translate204EndpointTests
                 ShipperName: "DIGIS LOGISTICS",
                 Stops:
                 [
-                    new ParsedStop(1, "CL", "DIGIS LOGISTICS", null),
-                    new ParsedStop(2, "CU", "DESTINATION DC", null)
+                    new ParsedStop(1, "CL", "DIGIS LOGISTICS"),
+                    new ParsedStop(2, "CU", "DESTINATION DC")
                 ])));
         using HttpClient client = factory.CreateClient();
 
         using StringContent content = new("ISA*00*...~", Encoding.UTF8, "text/plain");
 
         using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
-        string body = await response.Content.ReadAsStringAsync();
+        LoadTenderResponse? body = await response.Content.ReadFromJsonAsync<LoadTenderResponse>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("\"transactionId\":\"0001\"", body);
-        Assert.Contains("\"setPurpose\":\"Original\"", body);
-        Assert.Contains("\"type\":\"Pickup\"", body);
-        Assert.Contains("\"type\":\"Delivery\"", body);
+        Assert.NotNull(body);
+        Assert.Equal("0001", body.TransactionId);
+        Assert.Equal("Original", body.SetPurpose);
+        Assert.Collection(
+            body.Stops,
+            stop => Assert.Equal("Pickup", stop.Type),
+            stop => Assert.Equal("Delivery", stop.Type));
     }
 
     [Fact]
@@ -128,11 +150,13 @@ public sealed class Translate204EndpointTests
         using StringContent content = new("ISA*00*...~", Encoding.UTF8, "text/plain");
 
         using HttpResponseMessage response = await client.PostAsync("/api/v1/edi/translate-204", content);
-        string body = await response.Content.ReadAsStringAsync();
+        ValidationErrorResponse? body = await response.Content.ReadFromJsonAsync<ValidationErrorResponse>();
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("\"error\":\"EdiValidationException\"", body);
-        Assert.Contains("\"message\":\"Mandatory segment 'GS' is missing or malformed.\"", body);
+        Assert.NotNull(body);
+        Assert.Equal("EdiValidationException", body.Error);
+        Assert.Equal("Mandatory segment 'GS' is missing or malformed.", body.Message);
+        Assert.Equal((int)HttpStatusCode.BadRequest, body.Status);
     }
 
     [Fact]

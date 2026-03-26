@@ -13,7 +13,13 @@ public sealed class LoadTender204Parser : ILoadTender204Parser
     private const string MissingStMessage = "Mandatory segment 'ST' is missing or malformed.";
     private const string MissingB2Message = "Mandatory segment 'B2' is missing or malformed.";
     private const string MissingB2AMessage = "Mandatory segment 'B2A' is missing or malformed.";
+    private const string MissingSeMessage = "Mandatory segment 'SE' is missing or malformed.";
+    private const string MissingGeMessage = "Mandatory segment 'GE' is missing or malformed.";
+    private const string MissingIeaMessage = "Mandatory segment 'IEA' is missing or malformed.";
     private const string UnsupportedTransactionSetMessage = "Only ASC X12 204 transactions are supported.";
+    private const string MismatchedTransactionSetControlNumbersMessage = "ST02 and SE02 control numbers must match.";
+    private const string MultipleTransactionSetsNotSupportedMessage = "GE01 must be '1' because only one transaction set is supported.";
+    private const string MultipleFunctionalGroupsNotSupportedMessage = "IEA01 must be '1' because only one functional group is supported.";
     private static readonly string[] SupportedEstimatedDeliveryDateQualifiers = ["37"];
 
     public ParsedLoadTenderDocument Parse(string rawEdi)
@@ -31,6 +37,12 @@ public sealed class LoadTender204Parser : ILoadTender204Parser
             InternalB2Segment b2 = Require(document.BeginningSegment, MissingB2Message);
             InternalB2ASegment b2A = Require(document.SetPurposeSegment, MissingB2AMessage);
             Require(document.FunctionalGroupHeader, MissingGsMessage);
+            InternalSeSegment se = Require(document.TransactionSetTrailer, MissingSeMessage);
+            InternalGeSegment ge = Require(document.FunctionalGroupTrailer, MissingGeMessage);
+            InternalIeaSegment iea = Require(document.InterchangeTrailer, MissingIeaMessage);
+
+            ValidateTransactionSetTrailer(st, se);
+            ValidateSingleTransactionEnvelope(ge, iea);
 
             return new ParsedLoadTenderDocument(
                 TransactionId: st.TransactionSetControlNumber,
@@ -223,9 +235,37 @@ public sealed class LoadTender204Parser : ILoadTender204Parser
             .Select(loop => new ParsedStop(
                 Sequence: ParseRequiredInt(loop.Stop.SequenceNumber, "S5 stop sequence is missing or malformed."),
                 TypeCode: loop.Stop.StopReasonCode,
-                Name: loop.Parties.Select(party => party.Name).FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)),
-                ScheduledDateTime: null))
+                Name: loop.Parties.Select(party => party.Name).FirstOrDefault(name => !string.IsNullOrWhiteSpace(name))))
             .ToArray();
+    }
+
+    private static void ValidateTransactionSetTrailer(InternalStSegment st, InternalSeSegment se)
+    {
+        string? stControlNumber = NullIfWhiteSpace(st.TransactionSetControlNumber);
+        string? seControlNumber = NullIfWhiteSpace(se.TransactionSetControlNumber);
+
+        if (string.IsNullOrWhiteSpace(seControlNumber))
+        {
+            throw new EdiValidationException(MissingSeMessage);
+        }
+
+        if (string.IsNullOrWhiteSpace(stControlNumber) || !string.Equals(stControlNumber, seControlNumber, StringComparison.Ordinal))
+        {
+            throw new EdiValidationException(MismatchedTransactionSetControlNumbersMessage);
+        }
+    }
+
+    private static void ValidateSingleTransactionEnvelope(InternalGeSegment ge, InternalIeaSegment iea)
+    {
+        if (ParseRequiredInt(ge.NumberOfTransactionSetsIncluded, MissingGeMessage) != 1)
+        {
+            throw new EdiValidationException(MultipleTransactionSetsNotSupportedMessage);
+        }
+
+        if (ParseRequiredInt(iea.NumberOfIncludedGroups, MissingIeaMessage) != 1)
+        {
+            throw new EdiValidationException(MultipleFunctionalGroupsNotSupportedMessage);
+        }
     }
 
     private static DateOnly? ParseEstimatedDeliveryDate(IReadOnlyList<InternalG62Segment> segments)

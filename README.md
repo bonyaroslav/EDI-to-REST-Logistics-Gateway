@@ -5,6 +5,7 @@
 <p><strong>A focused .NET 8 portfolio demo that translates ASC X12 204 load tenders into a stable JSON contract through one clean synchronous API flow.</strong></p>
 
 <p align="center">
+  <a href="https://github.com/bonyaroslav/EDI-to-REST-Logistics-Gateway/actions/workflows/ci.yml"><img src="https://github.com/bonyaroslav/EDI-to-REST-Logistics-Gateway/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/.NET%208.0-512BD4?style=for-the-badge&logo=dotnet&logoColor=white" alt=".NET 8.0" />
   <img src="https://img.shields.io/badge/Architecture-Pragmatic%20Clean-007ACC?style=for-the-badge&logo=codeigniter&logoColor=white" alt="Pragmatic Clean Architecture" />
   <img src="https://img.shields.io/badge/Format-ASC%20X12%20204-FF6C37?style=for-the-badge&logo=databricks&logoColor=white" alt="ASC X12 204" />
@@ -18,6 +19,14 @@
 This repository demonstrates a narrow but realistic logistics integration problem: taking a raw `text/plain` ASC X12 `204` load tender and returning a clean JSON payload that a modern downstream REST consumer can use.
 
 The project is intentionally bounded. It is designed to be easy to review in a technical interview or portfolio walkthrough, not to simulate a production integration platform. The value is in the single vertical slice: parser isolation, explicit validation, and manual mapping that is easy to read and explain.
+
+## Reviewer Guide
+
+If you are reviewing this repository quickly, focus on three things:
+
+- Problem solved: translate one raw ASC X12 `204` load tender into a stable JSON contract through a synchronous API.
+- Why four projects: Domain keeps the parser boundary clean, Application owns mapping and validation, Infrastructure owns `Indice.Edi`, and API stays thin.
+- Intentional non-goals: no partner-specific rules, no `990` or `214` workflows, no persistence, brokers, auth, or broader platform concerns.
 
 ## Current Status
 
@@ -113,14 +122,12 @@ Expected response:
     {
       "sequence": 1,
       "type": "Pickup",
-      "name": "DIGIS LOGISTICS",
-      "scheduledDateTime": null
+      "name": "DIGIS LOGISTICS"
     },
     {
       "sequence": 2,
       "type": "Delivery",
-      "name": "DESTINATION DC",
-      "scheduledDateTime": null
+      "name": "DESTINATION DC"
     }
   ],
   "status": "Success"
@@ -215,6 +222,8 @@ graph TD
 ```bash
 dotnet test Logistics.EDI.Gateway.sln
 ```
+
+GitHub Actions runs restore, build, and test on every push and pull request via `.github/workflows/ci.yml`.
 
 ## Real-World Context
 

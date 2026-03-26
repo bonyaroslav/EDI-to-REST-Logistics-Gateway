@@ -26,14 +26,12 @@ public sealed class LoadTender204ParserTests
                 Assert.Equal(1, stop.Sequence);
                 Assert.Equal("CL", stop.TypeCode);
                 Assert.Equal("DIGIS LOGISTICS", stop.Name);
-                Assert.Null(stop.ScheduledDateTime);
             },
             stop =>
             {
                 Assert.Equal(2, stop.Sequence);
                 Assert.Equal("CU", stop.TypeCode);
                 Assert.Equal("DESTINATION DC", stop.Name);
-                Assert.Null(stop.ScheduledDateTime);
             });
     }
 
@@ -67,6 +65,54 @@ public sealed class LoadTender204ParserTests
         EdiValidationException exception = Assert.Throws<EdiValidationException>(() => _parser.Parse(SamplePayloads.MissingB2A));
 
         Assert.Equal("Mandatory segment 'B2A' is missing or malformed.", exception.Message);
+    }
+
+    [Fact]
+    public void Parse_MissingSe_ThrowsPredictableValidationException()
+    {
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => _parser.Parse(SamplePayloads.MissingSe));
+
+        Assert.Equal("Mandatory segment 'SE' is missing or malformed.", exception.Message);
+    }
+
+    [Fact]
+    public void Parse_MissingGe_ThrowsPredictableValidationException()
+    {
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => _parser.Parse(SamplePayloads.MissingGe));
+
+        Assert.Equal("Mandatory segment 'GE' is missing or malformed.", exception.Message);
+    }
+
+    [Fact]
+    public void Parse_MissingIea_ThrowsPredictableValidationException()
+    {
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => _parser.Parse(SamplePayloads.MissingIea));
+
+        Assert.Equal("Mandatory segment 'IEA' is missing or malformed.", exception.Message);
+    }
+
+    [Fact]
+    public void Parse_MismatchedTransactionSetControlNumbers_ThrowsPredictableValidationException()
+    {
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => _parser.Parse(SamplePayloads.MismatchedStAndSe));
+
+        Assert.Equal("ST02 and SE02 control numbers must match.", exception.Message);
+    }
+
+    [Fact]
+    public void Parse_MultipleTransactionSetsInFunctionalGroup_ThrowsPredictableValidationException()
+    {
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => _parser.Parse(SamplePayloads.MultipleTransactionSetsInGroup));
+
+        Assert.Equal("GE01 must be '1' because only one transaction set is supported.", exception.Message);
+    }
+
+    [Fact]
+    public void Parse_MultipleFunctionalGroupsInInterchange_ThrowsPredictableValidationException()
+    {
+        EdiValidationException exception = Assert.Throws<EdiValidationException>(() => _parser.Parse(SamplePayloads.MultipleFunctionalGroupsInInterchange));
+
+        Assert.Equal("IEA01 must be '1' because only one functional group is supported.", exception.Message);
     }
 
     [Fact]
@@ -113,6 +159,57 @@ public sealed class LoadTender204ParserTests
             "SE*4*0001~",
             "GE*1*1~",
             "IEA*1*000000001~");
+        public static string MissingSe => string.Concat(
+            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~",
+            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~",
+            "ST*204*0001~",
+            "B2**XXXX*9999999**PO~",
+            "B2A*00~",
+            "GE*1*1~",
+            "IEA*1*000000001~");
+        public static string MissingGe => string.Concat(
+            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~",
+            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~",
+            "ST*204*0001~",
+            "B2**XXXX*9999999**PO~",
+            "B2A*00~",
+            "SE*5*0001~",
+            "IEA*1*000000001~");
+        public static string MissingIea => string.Concat(
+            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~",
+            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~",
+            "ST*204*0001~",
+            "B2**XXXX*9999999**PO~",
+            "B2A*00~",
+            "SE*5*0001~",
+            "GE*1*1~");
+        public static string MismatchedStAndSe => string.Concat(
+            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~",
+            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~",
+            "ST*204*0001~",
+            "B2**XXXX*9999999**PO~",
+            "B2A*00~",
+            "SE*5*9999~",
+            "GE*1*1~",
+            "IEA*1*000000001~");
+        public static string MultipleTransactionSetsInGroup => string.Concat(
+            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~",
+            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~",
+            "ST*204*0001~",
+            "B2**XXXX*9999999**PO~",
+            "B2A*00~",
+            "SE*5*0001~",
+            "GE*2*1~",
+            "IEA*1*000000001~");
+        public static string MultipleFunctionalGroupsInInterchange => string.Concat(
+            "ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *250116*1230*U*00401*000000001*0*P*>~",
+            "GS*SM*SENDERID*RECEIVERID*20250116*1230*1*X*004010~",
+            "ST*204*0001~",
+            "B2**XXXX*9999999**PO~",
+            "B2A*00~",
+            "SE*5*0001~",
+            "GE*1*1~",
+            "IEA*2*000000001~");
         public static string Non204 => SampleFile.Read("unsupported-transaction-990.edi");
         public static string MalformedPayload => SampleFile.Read("malformed-payload.edi");
     }

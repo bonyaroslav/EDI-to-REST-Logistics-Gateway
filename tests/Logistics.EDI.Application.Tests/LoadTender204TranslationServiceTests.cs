@@ -29,8 +29,8 @@ public sealed class LoadTender204TranslationServiceTests
             ShipperName: "DIGIS LOGISTICS",
             Stops:
             [
-                new ParsedStop(1, "CL", "DIGIS LOGISTICS", new DateTimeOffset(2025, 1, 15, 8, 30, 0, TimeSpan.Zero)),
-                new ParsedStop(2, "CU", "DESTINATION DC", null)
+                new ParsedStop(1, "CL", "DIGIS LOGISTICS"),
+                new ParsedStop(2, "CU", "DESTINATION DC")
             ]);
 
         LoadTender204TranslationService service = new(new StubLoadTender204Parser(document));
@@ -50,14 +50,12 @@ public sealed class LoadTender204TranslationServiceTests
                 Assert.Equal(1, stop.Sequence);
                 Assert.Equal("Pickup", stop.Type);
                 Assert.Equal("DIGIS LOGISTICS", stop.Name);
-                Assert.Equal("2025-01-15T08:30:00.0000000+00:00", stop.ScheduledDateTime);
             },
             stop =>
             {
                 Assert.Equal(2, stop.Sequence);
                 Assert.Equal("Delivery", stop.Type);
                 Assert.Equal("DESTINATION DC", stop.Name);
-                Assert.Null(stop.ScheduledDateTime);
             });
         Assert.Equal("Success", response.Status);
     }
@@ -74,7 +72,7 @@ public sealed class LoadTender204TranslationServiceTests
             ShipperName: "DIGIS LOGISTICS",
             Stops:
             [
-                new ParsedStop(1, "CL", "DIGIS LOGISTICS", null)
+                new ParsedStop(1, "CL", "DIGIS LOGISTICS")
             ]);
 
         LoadTender204TranslationService service = new(new StubLoadTender204Parser(document));
@@ -96,8 +94,8 @@ public sealed class LoadTender204TranslationServiceTests
             ShipperName: "DIGIS LOGISTICS",
             Stops:
             [
-                new ParsedStop(1, "Pickup", "DIGIS LOGISTICS", null),
-                new ParsedStop(2, "Delivery", "DESTINATION DC", null)
+                new ParsedStop(1, "Pickup", "DIGIS LOGISTICS"),
+                new ParsedStop(2, "Delivery", "DESTINATION DC")
             ]);
 
         LoadTender204TranslationService service = new(new StubLoadTender204Parser(document));
@@ -205,8 +203,8 @@ public sealed class LoadTender204TranslationServiceTests
             ShipperName = " ",
             Stops =
             [
-                new ParsedStop(1, "Pickup", " ", null),
-                new ParsedStop(2, "Delivery", "", null)
+                new ParsedStop(1, "Pickup", " "),
+                new ParsedStop(2, "Delivery", "")
             ]
         };
 
@@ -255,8 +253,8 @@ public sealed class LoadTender204TranslationServiceTests
         {
             Stops =
             [
-                new ParsedStop(1, stopTypeCode, "STOP 1", null),
-                new ParsedStop(2, stopTypeCode == "CL" || stopTypeCode == "Pickup" ? "CU" : "CL", "STOP 2", null)
+                new ParsedStop(1, stopTypeCode, "STOP 1"),
+                new ParsedStop(2, stopTypeCode == "CL" || stopTypeCode == "Pickup" ? "CU" : "CL", "STOP 2")
             ]
         };
 
@@ -277,8 +275,8 @@ public sealed class LoadTender204TranslationServiceTests
         {
             Stops =
             [
-                new ParsedStop(1, stopTypeCode, "DIGIS LOGISTICS", null),
-                new ParsedStop(2, "CU", "DESTINATION DC", null)
+                new ParsedStop(1, stopTypeCode, "DIGIS LOGISTICS"),
+                new ParsedStop(2, "CU", "DESTINATION DC")
             ]
         };
 
@@ -296,8 +294,8 @@ public sealed class LoadTender204TranslationServiceTests
         {
             Stops =
             [
-                new ParsedStop(1, "ZZ", "DIGIS LOGISTICS", null),
-                new ParsedStop(2, "CU", "DESTINATION DC", null)
+                new ParsedStop(1, "ZZ", "DIGIS LOGISTICS"),
+                new ParsedStop(2, "CU", "DESTINATION DC")
             ]
         };
 
@@ -330,7 +328,7 @@ public sealed class LoadTender204TranslationServiceTests
         {
             Stops =
             [
-                new ParsedStop(1, "CU", "DESTINATION DC", null)
+                new ParsedStop(1, "CU", "DESTINATION DC")
             ]
         };
 
@@ -352,8 +350,8 @@ public sealed class LoadTender204TranslationServiceTests
             ShipperName: "DIGIS LOGISTICS",
             Stops:
             [
-                new ParsedStop(1, "Pickup", "DIGIS LOGISTICS", new DateTimeOffset(2025, 1, 15, 8, 30, 0, TimeSpan.Zero)),
-                new ParsedStop(2, "Delivery", "DESTINATION DC", null)
+                new ParsedStop(1, "Pickup", "DIGIS LOGISTICS"),
+                new ParsedStop(2, "Delivery", "DESTINATION DC")
             ]);
     }
 

@@ -56,8 +56,7 @@ public sealed class LoadTender204TranslationService : ILoadTender204TranslationS
             .Select(stop => new StopDto(
                 Sequence: stop.Sequence,
                 Type: MapStopType(stop.TypeCode),
-                Name: NullIfWhiteSpace(stop.Name),
-                ScheduledDateTime: stop.ScheduledDateTime?.ToUniversalTime().ToString("O")))
+                Name: NullIfWhiteSpace(stop.Name)))
             .ToArray();
     }
 
